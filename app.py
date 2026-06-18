@@ -188,13 +188,19 @@ def page_spc(std, kind, sg, val, size):
         if ctype == "I-MR":
             window = st.number_input("이동범위 윈도우(w)", 2, 10, 2)
 
-        # 부분군 크기와 관리도 적합성 가드
+        # 부분군 크기와 관리도 적합성 가드 (양방향)
         mode_size = int(du.subgroup_sizes(std, sg).mode().iloc[0])
         if ctype in ("Xbar-R", "Xbar-s") and mode_size < 2:
             st.warning(
                 f"선택한 데이터는 부분군 크기가 {mode_size}(개별값)입니다. "
                 "Xbar-R / Xbar-s 는 부분군 크기가 2 이상일 때만 의미가 있으므로, "
                 "**I-MR** 관리도를 선택하세요.")
+            return
+        if ctype == "I-MR" and mode_size > 1:
+            st.warning(
+                f"선택한 데이터는 부분군 크기가 {mode_size}입니다. "
+                "I-MR 은 부분군 크기가 1(개별값)일 때만 사용합니다. "
+                f"부분군 크기 {mode_size}에는 **{rec}** 관리도를 선택하세요.")
             return
 
         recompute = st.checkbox("이상치 제거 후 관리도 재작성", value=False)
