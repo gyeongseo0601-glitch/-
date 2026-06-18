@@ -87,11 +87,13 @@ def generate_count_data(
 # ---------------------------------------------------------------------------
 def to_value_frame(df: pd.DataFrame, sg_col: str, value_col: str) -> pd.DataFrame:
     """계량형 표준 프레임 [sg, value] 반환."""
-    out = df[[sg_col, value_col]].copy()
-    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
-    out = out.dropna(subset=[value_col])
-    return out.reset_index(drop=True)
-
+    if sg_col == value_col:
+        raise ValueError("부분군 컬럼과 측정값 컬럼은 서로 달라야 합니다.")
+    out = pd.DataFrame({
+        sg_col: df[sg_col].values,
+        value_col: pd.to_numeric(df[value_col], errors="coerce").values,
+    })
+    return out.dropna(subset=[value_col]).reset_index(drop=True)
 
 def to_count_frame(
     df: pd.DataFrame, sg_col: str, size_col: str, value_col: str
