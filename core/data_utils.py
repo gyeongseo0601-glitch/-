@@ -137,7 +137,10 @@ def is_constant_size(df: pd.DataFrame, sg_col: str) -> bool:
 def recommend_value_chart(df: pd.DataFrame, sg_col: str) -> str:
     """부분군 크기에 따른 계량형 관리도 추천 (강의록 선택기준 트리)."""
     sizes = subgroup_sizes(df, sg_col)
-    mode_size = int(sizes.mode().iloc[0])
+    if sizes.empty:
+        return "Xbar-R"
+    mode = sizes.mode()
+    mode_size = int(mode.iloc[0]) if not mode.empty else int(sizes.iloc[0])
     if mode_size == 1:
         return "I-MR"
     if mode_size <= 5:
