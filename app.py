@@ -20,6 +20,7 @@ from core import (
     control_charts as cc,
     data_utils as du,
     nelson_rules as nr,
+    time_weighted as tw,
     viz,
 )
 
@@ -31,7 +32,7 @@ st.set_page_config(page_title="SPC & 공정능력분석", layout="wide")
 # ===========================================================================
 def sidebar_data():
     st.sidebar.title("SPC & 공정능력분석")
-    st.sidebar.caption("C421089 이효승")
+    st.sidebar.caption("c421089 이효승")
     st.sidebar.divider()
 
     source = st.sidebar.radio(
@@ -130,9 +131,44 @@ def page_spc(std, kind, sg, val, size):
 
     if kind == "value":
         rec = du.recommend_value_chart(std, sg)
-        st.info(f"부분군 크기 기준 추천 관리도: **{rec}**")
-        ctype = st.selectbox("관리도 종류", ["Xbar-R", "Xbar-s", "I-MR"],
-                             index=["Xbar-R", "Xbar-s", "I-MR"].index(rec))
+        st.info(f"부분군 크기 기준 추천 관리도: **{rec}**  ·  "
+                "작은 추세 변화 탐지에는 EWMA / CUSUM 사용")
+        chart_options = ["Xbar-R", "Xbar-s", "I-MR", "EWMA", "CUSUM"]
+        ctype = st.selectbox("관리도 종류", chart_options,
+                             index=chart_options.index(rec))
+
+        # ----- 시간가중형 관리도 (EWMA / CUSUM) -----
+        if ctype in ("EWMA", "CUSUM"):
+            c1, c2, c3 = st.columns(3)
+            use_target = c1.checkbox("목표값 직접 지정", value=False)
+            target = c1.number_input("목표값(μ)", value=float(std[val].mean())) \
+                if use_target else None
+            window = c2.number_input("σ 추정 윈도우(개별값일 때)", 2, 10, 2)
+
+            if ctype == "EWMA":
+                lam = c3.slider("가중계수 λ", 0.05, 1.0, 0.20, 0.05)
+                L = c3.slider("관리한계 폭 L", 2.0, 3.5, 3.0, 0.1)
+                chart = tw.ewma_chart(std, lam, L, target, int(window))
+                st.plotly_chart(viz.ewma_figure(chart, f"EWMA 관리도 — {val}"),
+                                use_container_width=True)
+                sig = tw.ewma_signals(chart)
+            else:
+                k = c3.slider("기준값 계수 k", 0.25, 1.5, 0.5, 0.25)
+                h = c3.slider("결정구간 계수 h", 3.0, 6.0, 5.0, 0.5)
+                chart = tw.cusum_chart(std, k, h, target, int(window))
+                st.plotly_chart(viz.cusum_figure(chart, f"CUSUM 관리도 — {val}"),
+                                use_container_width=True)
+                sig = tw.cusum_signals(chart)
+
+            if sig:
+                st.error(f"{ctype} 이상 신호 발생 부분군: {sig}  "
+                         "→ 작은 변화가 누적되어 한계를 이탈했습니다.")
+            else:
+                st.success(f"{ctype}: 이상 신호 없음 — 관리상태로 판단됩니다.")
+            st.caption("시간가중형 관리도는 작은 변화가 누적 반영되므로, "
+                       "Shewhart 관리도가 놓치는 미세한 추세 변화 탐지에 유리합니다.")
+            return
+
         window = 2
         if ctype == "I-MR":
             window = st.number_input("이동범위 윈도우(w)", 2, 10, 2)
