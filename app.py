@@ -23,15 +23,15 @@ from core import (
     viz,
 )
 
-st.set_page_config(page_title="SPC & 공정능력분석", layout="wide", page_icon="📊")
+st.set_page_config(page_title="SPC & 공정능력분석", layout="wide")
 
 
 # ===========================================================================
 # 데이터 입력 (사이드바)
 # ===========================================================================
 def sidebar_data():
-    st.sidebar.title("📊 SPC & 공정능력분석")
-    st.sidebar.caption("강의록 기반 통합 분석 대시보드")
+    st.sidebar.title("SPC & 공정능력분석")
+    st.sidebar.caption("C421089 이효")
     st.sidebar.divider()
 
     source = st.sidebar.radio(
