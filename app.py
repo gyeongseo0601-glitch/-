@@ -113,21 +113,34 @@ def column_mapping(df, kind):
                  "(계량형: 부분군 + 측정값 / 계수형: 부분군 + 표본크기 + 관측값).")
         st.stop()
 
+    # 숫자형/비숫자형 컬럼 구분 (측정값은 숫자 컬럼이어야 함)
+    numeric_cols = [c for c in cols
+                    if pd.to_numeric(df[c], errors="coerce").notna().any()]
+    non_numeric = [c for c in cols if c not in numeric_cols]
+
     c1, c2, c3 = st.columns(3)
     if kind == "value":
-        sg = c1.selectbox("부분군 컬럼", cols, index=0)
-        # 측정값 기본값은 부분군과 다른 컬럼으로 자동 선택
-        val_default = next((c for c in cols if c != sg), cols[-1])
+        # 측정값 기본값: 첫 숫자 컬럼 / 부분군 기본값: 비숫자 우선, 없으면 다른 컬럼
+        val_default = numeric_cols[0] if numeric_cols else cols[-1]
+        sg_default = non_numeric[0] if non_numeric else \
+            next((c for c in cols if c != val_default), cols[0])
+
+        sg = c1.selectbox("부분군 컬럼", cols, index=cols.index(sg_default))
         val = c2.selectbox("측정값 컬럼", cols, index=cols.index(val_default))
         if sg == val:
             st.warning("부분군 컬럼과 측정값 컬럼이 같습니다. 서로 다른 컬럼을 선택하세요.")
             st.stop()
         std = du.to_value_frame(df, sg, val)
+        if std.empty:
+            st.warning(f"측정값 컬럼 '{val}' 에 분석할 숫자 데이터가 없습니다. "
+                       "측정값 컬럼에는 숫자 데이터를, 부분군 컬럼에는 라벨을 선택하세요.")
+            st.stop()
         return std, sg, val, None
     else:
-        sg = c1.selectbox("부분군 컬럼", cols, index=0)
+        sg_default = non_numeric[0] if non_numeric else cols[0]
         guess_size = cols.index("sample_size") if "sample_size" in cols \
-            else (1 if len(cols) > 1 else 0)
+            else (cols.index(sg_default) + 1 if cols.index(sg_default) + 1 < len(cols) else 0)
+        sg = c1.selectbox("부분군 컬럼", cols, index=cols.index(sg_default))
         size = c2.selectbox("표본크기 컬럼", cols, index=guess_size)
         val_default = next((c for c in cols if c not in (sg, size)), cols[-1])
         val = c3.selectbox("관측값 컬럼", cols, index=cols.index(val_default))
@@ -135,6 +148,9 @@ def column_mapping(df, kind):
             st.warning("부분군 · 표본크기 · 관측값 컬럼을 서로 다르게 선택하세요.")
             st.stop()
         std = du.to_count_frame(df, sg, size, val)
+        if std.empty:
+            st.warning("선택한 표본크기 / 관측값 컬럼에 숫자 데이터가 없습니다. 컬럼 선택을 확인하세요.")
+            st.stop()
         return std, sg, val, size
 
 
