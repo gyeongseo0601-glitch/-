@@ -86,22 +86,38 @@ def generate_count_data(
 # 업로드 데이터 → 표준 형태 변환
 # ---------------------------------------------------------------------------
 def to_value_frame(df: pd.DataFrame, sg_col: str, value_col: str) -> pd.DataFrame:
-    """계량형 표준 프레임 [sg, value] 반환."""
+    """계량형 표준 프레임 [sg, value] 반환.
+
+    부분군 컬럼과 측정값 컬럼이 같으면 ValueError 를 발생시켜
+    중복 컬럼으로 인한 오류를 사전에 차단한다.
+    """
     if sg_col == value_col:
         raise ValueError("부분군 컬럼과 측정값 컬럼은 서로 달라야 합니다.")
-    out = pd.DataFrame({
-        sg_col: df[sg_col].values,
-        value_col: pd.to_numeric(df[value_col], errors="coerce").values,
-    })
+    out = pd.DataFrame(
+        {
+            sg_col: df[sg_col].to_numpy(),
+            value_col: pd.to_numeric(df[value_col], errors="coerce").to_numpy(),
+        }
+    )
     return out.dropna(subset=[value_col]).reset_index(drop=True)
+
 
 def to_count_frame(
     df: pd.DataFrame, sg_col: str, size_col: str, value_col: str
 ) -> pd.DataFrame:
-    """계수형 표준 프레임 [sg, sample_size, value] 반환."""
-    out = df[[sg_col, size_col, value_col]].copy()
-    out[size_col] = pd.to_numeric(out[size_col], errors="coerce")
-    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
+    """계수형 표준 프레임 [sg, sample_size, value] 반환.
+
+    세 컬럼 중 중복이 있으면 ValueError 를 발생시킨다.
+    """
+    if len({sg_col, size_col, value_col}) < 3:
+        raise ValueError("부분군 · 표본크기 · 관측값 컬럼은 서로 모두 달라야 합니다.")
+    out = pd.DataFrame(
+        {
+            sg_col: df[sg_col].to_numpy(),
+            size_col: pd.to_numeric(df[size_col], errors="coerce").to_numpy(),
+            value_col: pd.to_numeric(df[value_col], errors="coerce").to_numpy(),
+        }
+    )
     out = out.dropna(subset=[size_col, value_col])
     out[size_col] = out[size_col].astype(int)
     out[value_col] = out[value_col].astype(int)
