@@ -24,15 +24,15 @@ from core import (
     viz,
 )
 
-st.set_page_config(page_title="SPC & 공정능력분석", layout="wide")
+st.set_page_config(page_title="SPC & 공정능력분석", layout="wide", page_icon="📊")
 
 
 # ===========================================================================
 # 데이터 입력 (사이드바)
 # ===========================================================================
 def sidebar_data():
-    st.sidebar.title("SPC & 공정능력분석")
-    st.sidebar.caption("c421089 이효승")
+    st.sidebar.title("📊 SPC & 공정능력분석")
+    st.sidebar.caption("강의록 기반 통합 분석 대시보드")
     st.sidebar.divider()
 
     source = st.sidebar.radio(
@@ -108,17 +108,32 @@ def sidebar_data():
 # ===========================================================================
 def column_mapping(df, kind):
     cols = list(df.columns)
+    if len(cols) < 2:
+        st.error("분석하려면 컬럼이 최소 2개 필요합니다 "
+                 "(계량형: 부분군 + 측정값 / 계수형: 부분군 + 표본크기 + 관측값).")
+        st.stop()
+
     c1, c2, c3 = st.columns(3)
     if kind == "value":
         sg = c1.selectbox("부분군 컬럼", cols, index=0)
-        val = c2.selectbox("측정값 컬럼", cols, index=min(1, len(cols) - 1))
+        # 측정값 기본값은 부분군과 다른 컬럼으로 자동 선택
+        val_default = next((c for c in cols if c != sg), cols[-1])
+        val = c2.selectbox("측정값 컬럼", cols, index=cols.index(val_default))
+        if sg == val:
+            st.warning("부분군 컬럼과 측정값 컬럼이 같습니다. 서로 다른 컬럼을 선택하세요.")
+            st.stop()
         std = du.to_value_frame(df, sg, val)
         return std, sg, val, None
     else:
         sg = c1.selectbox("부분군 컬럼", cols, index=0)
-        guess_size = cols.index("sample_size") if "sample_size" in cols else min(1, len(cols) - 1)
+        guess_size = cols.index("sample_size") if "sample_size" in cols \
+            else (1 if len(cols) > 1 else 0)
         size = c2.selectbox("표본크기 컬럼", cols, index=guess_size)
-        val = c3.selectbox("관측값 컬럼", cols, index=len(cols) - 1)
+        val_default = next((c for c in cols if c not in (sg, size)), cols[-1])
+        val = c3.selectbox("관측값 컬럼", cols, index=cols.index(val_default))
+        if len({sg, size, val}) < 3:
+            st.warning("부분군 · 표본크기 · 관측값 컬럼을 서로 다르게 선택하세요.")
+            st.stop()
         std = du.to_count_frame(df, sg, size, val)
         return std, sg, val, size
 
@@ -172,6 +187,15 @@ def page_spc(std, kind, sg, val, size):
         window = 2
         if ctype == "I-MR":
             window = st.number_input("이동범위 윈도우(w)", 2, 10, 2)
+
+        # 부분군 크기와 관리도 적합성 가드
+        mode_size = int(du.subgroup_sizes(std, sg).mode().iloc[0])
+        if ctype in ("Xbar-R", "Xbar-s") and mode_size < 2:
+            st.warning(
+                f"선택한 데이터는 부분군 크기가 {mode_size}(개별값)입니다. "
+                "Xbar-R / Xbar-s 는 부분군 크기가 2 이상일 때만 의미가 있으므로, "
+                "**I-MR** 관리도를 선택하세요.")
+            return
 
         recompute = st.checkbox("이상치 제거 후 관리도 재작성", value=False)
         if recompute:
