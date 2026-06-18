@@ -78,6 +78,56 @@ def control_chart_figure(charts, names, title, mark_rules=True):
 # ---------------------------------------------------------------------------
 # 공정능력분석 시각화
 # ---------------------------------------------------------------------------
+def ewma_figure(chart, title="EWMA 관리도"):
+    """EWMA 관리도 (점마다 다른 한계). 한계 이탈 점은 빨간색."""
+    idx = list(chart.index)
+    out = set(chart.index[(chart["point"] > chart["UCL"]) |
+                          (chart["point"] < chart["LCL"])])
+    colors = ["#d62728" if k in out else "#1f77b4" for k in idx]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=idx, y=chart["point"], mode="lines+markers",
+                             marker=dict(size=8, color=colors),
+                             line=dict(color="#4c78a8"), name="EWMA"))
+    fig.add_trace(go.Scatter(x=idx, y=chart["CL"], mode="lines",
+                             line=dict(color="green", dash="dashdot"), name="CL"))
+    fig.add_trace(go.Scatter(x=idx, y=chart["UCL"], mode="lines",
+                             line=dict(color="magenta", dash="dot"), name="UCL"))
+    fig.add_trace(go.Scatter(x=idx, y=chart["LCL"], mode="lines",
+                             line=dict(color="red", dash="dot"), name="LCL"))
+    fig.update_layout(template="seaborn", title=title, showlegend=False,
+                      xaxis_title="부분군", yaxis_title="EWMA 통계량",
+                      height=420, margin=dict(l=50, r=40, t=70, b=50))
+    return fig
+
+
+def cusum_figure(chart, title="CUSUM 관리도"):
+    """CUSUM 관리도: C+ (위), C- (아래), 결정구간 ±H."""
+    idx = list(chart.index)
+    H = chart["H"].iloc[0]
+    out_p = set(chart.index[chart["Cplus"] > H])
+    out_m = set(chart.index[chart["Cminus"] < -H])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=idx, y=chart["Cplus"], mode="lines+markers", name="C+",
+        line=dict(color="#1f77b4"),
+        marker=dict(size=8, color=["#d62728" if k in out_p else "#1f77b4" for k in idx])))
+    fig.add_trace(go.Scatter(
+        x=idx, y=chart["Cminus"], mode="lines+markers", name="C-",
+        line=dict(color="#9467bd"),
+        marker=dict(size=8, color=["#d62728" if k in out_m else "#9467bd" for k in idx])))
+    fig.add_trace(go.Scatter(x=idx, y=chart["H"], mode="lines",
+                             line=dict(color="magenta", dash="dot"), name="+H"))
+    fig.add_trace(go.Scatter(x=idx, y=chart["mH"], mode="lines",
+                             line=dict(color="red", dash="dot"), name="-H"))
+    fig.add_hline(y=0, line_width=1, line_color="green", line_dash="dashdot")
+    fig.update_layout(template="seaborn", title=title, showlegend=True,
+                      xaxis_title="부분군", yaxis_title="누적합",
+                      height=420, margin=dict(l=50, r=40, t=70, b=50))
+    return fig
+
+
 def capability_figure(values, lsl, usl, result, var_name="value"):
     """히스토그램 + 정규분포 곡선 + 규격선 + 지수 주석."""
     values = np.asarray(values, dtype=float)
