@@ -113,31 +113,54 @@ def column_mapping(df, kind):
                  "(계량형: 부분군 + 측정값 / 계수형: 부분군 + 표본크기 + 관측값).")
         st.stop()
 
-    # 숫자형/비숫자형 컬럼 구분 (측정값은 숫자 컬럼이어야 함)
+    # 컬럼 특성 분석: 측정값은 숫자이고 고유값 비율이 높다(거의 다 다른 값),
+    # 부분군은 같은 값이 반복된다(고유값 비율이 낮다).
     numeric_cols = [c for c in cols
                     if pd.to_numeric(df[c], errors="coerce").notna().any()]
     non_numeric = [c for c in cols if c not in numeric_cols]
 
+    def uniq_ratio(c):
+        return df[c].nunique() / max(len(df), 1)
+
+    def pick_value_col():
+        """측정값 컬럼 추정: 숫자 컬럼 중 고유값 비율이 가장 높은 컬럼.
+        동점이면 더 뒤쪽 컬럼(측정값은 라벨 뒤에 오는 경우가 많음)."""
+        cand = numeric_cols if numeric_cols else cols
+        return max(cand, key=lambda c: (uniq_ratio(c), cols.index(c)))
+
+    def pick_subgroup_col(exclude):
+        """부분군 컬럼 추정: 비숫자 우선, 아니면 고유값 비율이 가장 낮은 컬럼.
+        동점이면 더 앞쪽 컬럼(라벨/ID는 앞에 오는 경우가 많음)."""
+        rest = [c for c in cols if c != exclude]
+        nn = [c for c in rest if c in non_numeric]
+        pool = nn if nn else rest
+        if not pool:
+            return cols[0]
+        return min(pool, key=lambda c: (uniq_ratio(c), cols.index(c)))
+
     c1, c2, c3 = st.columns(3)
     if kind == "value":
-        # 측정값 기본값: 첫 숫자 컬럼 / 부분군 기본값: 비숫자 우선, 없으면 다른 컬럼
-        val_default = numeric_cols[0] if numeric_cols else cols[-1]
-        sg_default = non_numeric[0] if non_numeric else \
-            next((c for c in cols if c != val_default), cols[0])
+        val_default = pick_value_col()
+        sg_default = pick_subgroup_col(exclude=val_default)
 
         sg = c1.selectbox("부분군 컬럼", cols, index=cols.index(sg_default))
         val = c2.selectbox("측정값 컬럼", cols, index=cols.index(val_default))
         if sg == val:
             st.warning("부분군 컬럼과 측정값 컬럼이 같습니다. 서로 다른 컬럼을 선택하세요.")
             st.stop()
-        std = du.to_value_frame(df, sg, val)
+        try:
+            std = du.to_value_frame(df, sg, val)
+        except Exception as e:
+            st.error(f"데이터 변환 중 문제가 발생했습니다: {e}\n\n"
+                     "측정값 컬럼에는 숫자 데이터를, 부분군 컬럼에는 라벨을 선택했는지 확인하세요.")
+            st.stop()
         if std.empty:
             st.warning(f"측정값 컬럼 '{val}' 에 분석할 숫자 데이터가 없습니다. "
                        "측정값 컬럼에는 숫자 데이터를, 부분군 컬럼에는 라벨을 선택하세요.")
             st.stop()
         return std, sg, val, None
     else:
-        sg_default = non_numeric[0] if non_numeric else cols[0]
+        sg_default = pick_subgroup_col(exclude=pick_value_col())
         guess_size = cols.index("sample_size") if "sample_size" in cols \
             else (cols.index(sg_default) + 1 if cols.index(sg_default) + 1 < len(cols) else 0)
         sg = c1.selectbox("부분군 컬럼", cols, index=cols.index(sg_default))
@@ -147,7 +170,12 @@ def column_mapping(df, kind):
         if len({sg, size, val}) < 3:
             st.warning("부분군 · 표본크기 · 관측값 컬럼을 서로 다르게 선택하세요.")
             st.stop()
-        std = du.to_count_frame(df, sg, size, val)
+        try:
+            std = du.to_count_frame(df, sg, size, val)
+        except Exception as e:
+            st.error(f"데이터 변환 중 문제가 발생했습니다: {e}\n\n"
+                     "표본크기·관측값 컬럼에는 숫자 데이터를 선택했는지 확인하세요.")
+            st.stop()
         if std.empty:
             st.warning("선택한 표본크기 / 관측값 컬럼에 숫자 데이터가 없습니다. 컬럼 선택을 확인하세요.")
             st.stop()
